@@ -2,15 +2,21 @@ provider "aws" {
     region  = "ap-south-1"
 }
 resource "aws_instance" "demo_server"{
-    ami = "ami-02b49a24cfb95941c"
+    ami = "ami-0ad21ae1d0696ad58"
     instance_type = "t2.micro"
     key_name = "new-pair"
-    security_groups = ["demo-sg"]
+    vpc_security_group_ids = [aws_security_group.demo-sg.id]
+    #security_groups = ["demo-sg"]
+    subnet_id = aws_subnet.dpp-public-subnet-01.id
+    for_each = toset(["jenkins-master", "Build-slave", "Ansible"])
+   tags = {
+     Name = "${each.key}"
+   }
 }
 resource "aws_security_group" "demo-sg" {
   name        = "demo-sg"
   description = "Allow TLS inbound traffic"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = aws_vpc.dpp-vpc.id
 
   ingress {
     description = "ssh access"
@@ -31,4 +37,49 @@ resource "aws_security_group" "demo-sg" {
   tags = {
     Name = "ssh-port"
   }
+}
+resource "aws_vpc" "dpp-vpc"{
+    cidr_blocks = "10.1.0.0/16"
+    tags = {
+        name = "dpp-vpc"
+    }
+}
+resource "aws_subnet" "dpp-public-subnet-01"{
+    vpc_id = aws_vpc.dpp-vpc.id
+    cidr_blocks = "10.1.1.0/24"
+    map_public_ip_on_launch = "true"
+    availability_zone = "ap-south-1a"
+    tags={
+        name = "dpp-public-subnet-01"
+    }
+}
+resource "aws_subnet" "dpp-public-subnet-02"{
+    vpc_id = aws_vpc.dpp-vpc.id
+    cidr_blocks = "10.1.2.0/24"
+    map_public_ip_on_launch = "true"
+    availability_zone = "ap-south-1b"
+    tags={
+        name = "dpp-public-subnet-02"
+    }
+}
+resource "aws_internet_gateway" "dpp-igw"{
+    vpc_id = aws_vpc.dpp-vpc.id
+    tags = {
+        name = "dpp-igw"
+    }
+}
+resource "aws_route_table" "dpp-public-rt"{
+    vpc_id = aws_vpc.dpp-vpc.id
+    route = {
+        cidr_blocks = "0.0.0.0/0"
+        gateway_id = "aws_internet_gateway.dpp-igw.id"
+    }
+}
+resource "aws_route_table_association" "dpp-rta-public-subnet-01" {
+    subnet_id = aws_subnet.dpp-public-subnet-01.id
+    route_table_id = aws_route_table.dpp-public-rt.id
+}
+resource "aws_route_table_association" "dpp-rta-public-subnet-02" {
+    subnet_id = aws_subnet.dpp-public-subnet-02.id
+    route_table_id = aws_route_table.dpp-public-rt.id
 }
